@@ -1,0 +1,176 @@
+{
+  "model_name": "gemma-4-31B-it",
+  "model_root": "/home/atc/hf_models/gemma-4-31B-it",
+  "max_context_length": 8192,
+  "endpoint": "http://192.168.29.252:8000",
+  "timestamp": "2026-04-03T03:36:09.226853+00:00",
+  "tests": {
+    "reasoning": {
+      "label": "Multi-step Reasoning",
+      "passed": true,
+      "checks": [
+        {
+          "keyword": "9",
+          "found": true
+        }
+      ],
+      "ttft_ms": 767.4,
+      "total_time_s": 27.0,
+      "completion_tokens": 103,
+      "tps": 3.8,
+      "response_preview": "The answer is **9**.\n\nHere is the step-by-step reasoning:\n\n1.  **Analyze the phrasing:** The key phrase in the riddle is \"all but 9.\"\n2.  **Interpret the logic:** In a mathematical context, \"all but 9\" means that every sheep was removed *except* for 9.\n3.  **Determine the outcome:** Since 9 sheep we"
+    },
+    "code_python": {
+      "label": "Python Code Generation",
+      "passed": true,
+      "checks": [
+        {
+          "keyword": "def merge_sorted",
+          "found": true
+        }
+      ],
+      "ttft_ms": 546.5,
+      "total_time_s": 128.15,
+      "completion_tokens": 500,
+      "tps": 3.9,
+      "response_preview": "Here is the complete implementation. To achieve a time complexity of $O(n + m)$, we use the \"two-pointer\" approach, comparing the elements at the front of each list and appending the smaller one to the result.\n\n```python\nfrom typing import List\n\ndef merge_sorted(list_a: List[int], list_b: List[int])"
+    },
+    "code_debug": {
+      "label": "Code Debugging",
+      "passed": true,
+      "checks": [
+        {
+          "keyword": "8",
+          "found": true
+        }
+      ],
+      "ttft_ms": 318.5,
+      "total_time_s": 128.14,
+      "completion_tokens": 500,
+      "tps": 3.9,
+      "response_preview": "### The Bug Analysis\n\n**What does the function return for `fibonacci(6)`?**\nIt returns **13**.\n\n**Why?**\nThe Fibonacci sequence is: $0, 1, 1, 2, 3, 5, 8, 13, \\dots$\nThe index $6$ should correspond to the value **8**. However, your loop runs $n$ times. Let's trace the logic:\n1. For $n=2$: The loop ru"
+    },
+    "math": {
+      "label": "Mathematical Reasoning",
+      "passed": true,
+      "checks": [
+        {
+          "keyword": "22",
+          "found": true
+        }
+      ],
+      "ttft_ms": 297.4,
+      "total_time_s": 76.51,
+      "completion_tokens": 300,
+      "tps": 3.9,
+      "response_preview": "To find the value of the expression, we first need to solve for $x$ using the provided equation.\n\n**Step 1: Solve for $x$**\nGiven:\n$$3x = 22$$\n*(Wait, the prompt says $3x = 22$ in the logic, but the text says $3x = 22$ in the logic, but the text says $3x = 22$ in the logic, but the text says $3x = 2"
+    },
+    "summarization": {
+      "label": "Text Summarization",
+      "passed": true,
+      "checks": [
+        {
+          "keyword": "transformer",
+          "found": true
+        },
+        {
+          "keyword": "attention",
+          "found": true
+        }
+      ],
+      "ttft_ms": 321.5,
+      "total_time_s": 11.01,
+      "completion_tokens": 42,
+      "tps": 3.8,
+      "response_preview": "The transformer architecture utilizes a specialized attention mechanism to weigh the importance of different input parts during output generation. This innovation, which allows for more efficient training, serves as the foundation for modern large-scale language models."
+    },
+    "instruction_follow": {
+      "label": "Instruction Following",
+      "passed": true,
+      "checks": [
+        {
+          "keyword": "Python",
+          "found": true
+        }
+      ],
+      "ttft_ms": 516.9,
+      "total_time_s": 5.34,
+      "completion_tokens": 19,
+      "tps": 3.6,
+      "response_preview": "1. Python\n2. Perl\n3. PHP\n4. Pascal\n5. Prolog"
+    },
+    "creative": {
+      "label": "Creative Writing",
+      "passed": true,
+      "checks": [],
+      "ttft_ms": 537.6,
+      "total_time_s": 4.85,
+      "completion_tokens": 17,
+      "tps": 3.5,
+      "response_preview": "Thousands of small cores,\nParallel paths process all,\nData flows like light."
+    },
+    "multi_turn": {
+      "label": "Multi-turn Conversation",
+      "passed": true,
+      "checks": [
+        {
+          "keyword": "Eiffel",
+          "found": true
+        }
+      ],
+      "ttft_ms": 539.9,
+      "total_time_s": 18.07,
+      "completion_tokens": 69,
+      "tps": 3.8,
+      "response_preview": "The population of Paris varies depending on whether you are referring to the city center (the commune) or the larger metropolitan area:\n\n*   **City Center:** Approximately 2.1 million people.\n*   **Metropolitan Area:** Approximately 13 million people.\n\nThe most famous landmark in Paris is the **Eiff"
+    },
+    "json_output": {
+      "label": "Structured JSON Output",
+      "passed": false,
+      "checks": [
+        {
+          "json_valid": false
+        }
+      ],
+      "ttft_ms": 516.5,
+      "total_time_s": 38.43,
+      "completion_tokens": 150,
+      "tps": 3.9,
+      "response_preview": "{\"benchmark\": \"benchmark\", \"score\": 95.5, \"tags\": [\"benchmark\"], \"passed\": true}\n{\"benchmark\": \"benchmark\", \"score\": 95.5, \"tags\": [\"benchmark\"], \"passed\": true}\n{\"benchmark\": \"benchmark\", \"score\": 95.5, \"tags\": [\"benchmark\"], \"passed\": true}\n{\"benchmark\": \"benchmark\", \"score\": 95.5, \"tags\": [\"bench"
+    },
+    "long_context": {
+      "label": "Long Context Understanding",
+      "passed": true,
+      "checks": [
+        {
+          "keyword": "orange",
+          "found": true
+        },
+        {
+          "keyword": "lemon",
+          "found": true
+        },
+        {
+          "keyword": "zucchini",
+          "found": true
+        }
+      ],
+      "ttft_ms": 320.8,
+      "total_time_s": 8.2,
+      "completion_tokens": 31,
+      "tps": 3.8,
+      "response_preview": "The 15th item is **orange**.\nThe item after 'kiwi' is **lemon**.\nThe last item is **zucchini**."
+    }
+  },
+  "summary": {
+    "ttft_avg_ms": 743.3,
+    "ttft_min_ms": 655.2,
+    "ttft_p50_ms": 786.3,
+    "tests_passed": 9,
+    "tests_total": 10,
+    "pass_rate": "9/10 (90%)",
+    "avg_tps": 3.8,
+    "median_tps": 3.8,
+    "max_tps": 3.9
+  }
+}

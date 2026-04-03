@@ -1,0 +1,176 @@
+{
+  "model_name": "Qwen3-Omni-30B",
+  "model_root": "/home/atc/hf_models/Qwen3-Omni-30B-A3B-Instruct",
+  "max_context_length": 16384,
+  "endpoint": "http://192.168.29.252:8000",
+  "timestamp": "2026-04-03T01:46:22.468977+00:00",
+  "tests": {
+    "reasoning": {
+      "label": "Multi-step Reasoning",
+      "passed": true,
+      "checks": [
+        {
+          "keyword": "9",
+          "found": true
+        }
+      ],
+      "ttft_ms": 241.8,
+      "total_time_s": 6.01,
+      "completion_tokens": 175,
+      "tps": 29.1,
+      "response_preview": "Let's break down the riddle step by step:\n\n**Statement:**  \n\"A farmer has 17 sheep. All but 9 run away. How many sheep does the farmer have left?\"\n\n### Step 1: Understand the total number of sheep\nThe farmer starts with **17 sheep**.\n\n### Step 2: Interpret \"All but 9 run away\"\nThis is the key phrase"
+    },
+    "code_python": {
+      "label": "Python Code Generation",
+      "passed": true,
+      "checks": [
+        {
+          "keyword": "def merge_sorted",
+          "found": true
+        }
+      ],
+      "ttft_ms": 228.7,
+      "total_time_s": 12.2,
+      "completion_tokens": 364,
+      "tps": 29.8,
+      "response_preview": "```python\nfrom typing import List\n\ndef merge_sorted(a: List[int], b: List[int]) -> List[int]:\n    \"\"\"\n    Merges two sorted lists into a single sorted list using the two-pointer technique.\n    \n    This function assumes both input lists are already sorted in ascending order.\n    It combines them int"
+    },
+    "code_debug": {
+      "label": "Code Debugging",
+      "passed": true,
+      "checks": [
+        {
+          "keyword": "8",
+          "found": true
+        }
+      ],
+      "ttft_ms": 292.1,
+      "total_time_s": 16.78,
+      "completion_tokens": 500,
+      "tps": 29.8,
+      "response_preview": "Let's analyze the code step by step.\n\n### Given Code:\n```python\ndef fibonacci(n):\n    if n <= 1:\n        return n\n    a, b = 0, 1\n    for i in range(n):\n        a, b = b, a + b\n    return a\n\nprint(fibonacci(0))  # Expected: 0\nprint(fibonacci(1))  # Expected: 1\nprint(fibonacci(6))  # Expected: 8\nprin"
+    },
+    "math": {
+      "label": "Mathematical Reasoning",
+      "passed": true,
+      "checks": [
+        {
+          "keyword": "22",
+          "found": true
+        }
+      ],
+      "ttft_ms": 183.7,
+      "total_time_s": 6.03,
+      "completion_tokens": 177,
+      "tps": 29.4,
+      "response_preview": "We are given the equation:\n\n$$\n3x + 7 = 22\n$$\n\n### Step 1: Solve for $ x $\n\nSubtract 7 from both sides:\n\n$$\n3x = 22 - 7\n$$\n$$\n3x = 15\n$$\n\nNow divide both sides by 3:\n\n$$\nx = \\frac{15}{3}\n$$\n$$\nx = 5\n$$\n\n### Step 2: Find the value of $ 5x - 3 $\n\nSubstitute $ x = 5 $ into the expression:\n\n$$\n5x - 3 = "
+    },
+    "summarization": {
+      "label": "Text Summarization",
+      "passed": true,
+      "checks": [
+        {
+          "keyword": "transformer",
+          "found": true
+        },
+        {
+          "keyword": "attention",
+          "found": true
+        }
+      ],
+      "ttft_ms": 323.7,
+      "total_time_s": 2.83,
+      "completion_tokens": 76,
+      "tps": 26.8,
+      "response_preview": "The transformer architecture, introduced in the 2017 paper 'Attention Is All You Need', revolutionized natural language processing by replacing recurrent networks with self-attention mechanisms, enabling greater parallelization and faster training. Its encoder-decoder design with multi-head attentio"
+    },
+    "instruction_follow": {
+      "label": "Instruction Following",
+      "passed": true,
+      "checks": [
+        {
+          "keyword": "Python",
+          "found": true
+        }
+      ],
+      "ttft_ms": 178.9,
+      "total_time_s": 0.84,
+      "completion_tokens": 20,
+      "tps": 23.9,
+      "response_preview": "1. Python  \n2. PHP  \n3. Perl  \n4. Pascal  \n5. PL/I"
+    },
+    "creative": {
+      "label": "Creative Writing",
+      "passed": true,
+      "checks": [],
+      "ttft_ms": 160.6,
+      "total_time_s": 3.39,
+      "completion_tokens": 100,
+      "tps": 29.5,
+      "response_preview": "Here's a haiku capturing GPU computing:\n\n**Parallel cores race,  \nRendering worlds in light-speed,  \nData flows like streams.**\n\n*   **Line 1 (5 syllables):** Focuses on the core concept - **parallel processing** (many cores working simultaneously).\n*   **Line 2 (7 syllables):** Highlights a key app"
+    },
+    "multi_turn": {
+      "label": "Multi-turn Conversation",
+      "passed": true,
+      "checks": [
+        {
+          "keyword": "Eiffel",
+          "found": true
+        }
+      ],
+      "ttft_ms": 186.5,
+      "total_time_s": 3.66,
+      "completion_tokens": 106,
+      "tps": 28.9,
+      "response_preview": "The population of Paris is approximately 2.1 million people within the city limits (as of recent estimates). However, the greater Paris metropolitan area, known as *\u00cele-de-France*, has a population of around 12 million, making it the largest urban area in the European Union.\n\nThe most famous landmar"
+    },
+    "json_output": {
+      "label": "Structured JSON Output",
+      "passed": true,
+      "checks": [
+        {
+          "json_valid": true
+        }
+      ],
+      "ttft_ms": 216.4,
+      "total_time_s": 1.22,
+      "completion_tokens": 31,
+      "tps": 25.4,
+      "response_preview": "{\"name\": \"benchmark_test\", \"score\": 95.5, \"tags\": [\"fast\", \"accurate\"], \"passed\": true}"
+    },
+    "long_context": {
+      "label": "Long Context Understanding",
+      "passed": true,
+      "checks": [
+        {
+          "keyword": "orange",
+          "found": true
+        },
+        {
+          "keyword": "lemon",
+          "found": true
+        },
+        {
+          "keyword": "zucchini",
+          "found": true
+        }
+      ],
+      "ttft_ms": 249.0,
+      "total_time_s": 6.82,
+      "completion_tokens": 200,
+      "tps": 29.3,
+      "response_preview": "Let's go step by step.\n\nFirst, here is the list of items you provided:\n\n1. apple  \n2. banana  \n3. cherry  \n4. dragonfruit  \n5. elderberry  \n6. fig  \n7. grape  \n8. honeydew  \n9. imbe  \n10. jackfruit  \n11. kiwi  \n12. lemon  \n13. mango  \n14. nectarine  \n15. orange  \n16. papaya  \n17. quince  \n18. raspbe"
+    }
+  },
+  "summary": {
+    "ttft_avg_ms": 290.8,
+    "ttft_min_ms": 126.3,
+    "ttft_p50_ms": 127.2,
+    "tests_passed": 10,
+    "tests_total": 10,
+    "pass_rate": "10/10 (100%)",
+    "avg_tps": 28.2,
+    "median_tps": 29.2,
+    "max_tps": 29.8
+  }
+}
