@@ -8,7 +8,7 @@
 #   ./run-benchmark.sh --model Qwen3-Omni-30B --compare previous_report.json
 # =============================================================================
 
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"

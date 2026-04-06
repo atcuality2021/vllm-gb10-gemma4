@@ -16,23 +16,17 @@
 # Usage: ./gemma4-backport.sh [/path/to/vllm-env]
 # =============================================================================
 
-set -e
+set -euo pipefail
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
-
-log()  { echo -e "${GREEN}[OK]${NC} $1"; }
-warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
-err()  { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
+PATCH_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$PATCH_DIR/../lib/common.sh"
 
 VENV="${1:-$HOME/vllm-env}"
 PIP="$VENV/bin/pip"
 PYTHON="$VENV/bin/python"
 
 # Find vLLM package path
-PYVER=$($PYTHON --version 2>&1 | grep -oP '3\.\d+')
+PYVER=$(detect_pyver "$VENV")
 VLLM_PKG="$VENV/lib/python${PYVER}/site-packages/vllm"
 
 [ -f "$PIP" ]       || err "pip not found at $PIP"
@@ -65,6 +59,7 @@ log "transformers upgraded"
 # ---- Step 2: Clone vLLM main ----
 echo "[2/6] Cloning vLLM main branch (shallow)..."
 TMPDIR=$(mktemp -d)
+trap 'rm -rf "$TMPDIR"' EXIT
 git clone --depth 1 https://github.com/vllm-project/vllm.git "$TMPDIR/vllm-src" 2>&1 | tail -1
 
 SRC="$TMPDIR/vllm-src/vllm"
@@ -133,9 +128,10 @@ fi
 echo "[6/6] Patching utils.py for named buffer loading..."
 UTILSPY="$VLLM_PKG/model_executor/models/utils.py"
 if ! grep -q 'named_buffers' "$UTILSPY" 2>/dev/null; then
-    python3 << 'PYEOF'
+    UTILSPY_PATH="$UTILSPY" python3 << 'PYEOF'
 import sys, os
-path = os.environ.get("UTILSPY_PATH", sys.argv[1] if len(sys.argv) > 1 else "")
+
+path = os.environ["UTILSPY_PATH"]
 with open(path) as f:
     content = f.read()
 
@@ -154,15 +150,13 @@ if idx != -1:
         f.write(content)
     print("  Patched utils.py")
 else:
-    print("  Could not find patch target in utils.py — may already be patched")
+    print("  ERROR: Could not find patch target in utils.py", file=sys.stderr)
+    sys.exit(1)
 PYEOF
     log "utils.py patched"
 else
     log "utils.py already patched"
 fi
-
-# ---- Cleanup ----
-rm -rf "$TMPDIR"
 
 echo ""
 echo "============================================="

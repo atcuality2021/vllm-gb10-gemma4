@@ -8,20 +8,16 @@
 # Usage: ./cutlass-fp8-sm121.sh [/path/to/vllm-env]
 # =============================================================================
 
-set -e
+set -euo pipefail
 
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-NC='\033[0m'
-
-log() { echo -e "${GREEN}[OK]${NC} $1"; }
-err() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/../lib/common.sh"
 
 VENV="${1:-$HOME/vllm-env}"
 PYTHON="$VENV/bin/python"
 
 # Find vLLM package path
-PYVER=$($PYTHON --version 2>&1 | grep -oP '3\.\d+')
+PYVER=$(detect_pyver "$VENV")
 VLLM_PKG="$VENV/lib/python${PYVER}/site-packages/vllm"
 [ -d "$VLLM_PKG" ] || err "vLLM not found at $VLLM_PKG"
 
@@ -38,42 +34,56 @@ fi
 cp "$TARGET" "${TARGET}.bak"
 
 # Patch functions to return False
-python3 << PYEOF
-import re
+CUTLASS_TARGET="$TARGET" python3 << 'PYEOF'
+import os, re, sys
 
-with open("$TARGET") as f:
+target = os.environ["CUTLASS_TARGET"]
+with open(target) as f:
     content = f.read()
 
+changed = False
+
 # Patch cutlass_fp8_supported()
-content = re.sub(
+new_content = re.sub(
     r'(def cutlass_fp8_supported\(\)[^:]*:\n)',
     r'\1    return False  # Patched: sm_121 not in prebuilt CUTLASS\n',
     content
 )
+if new_content != content:
+    changed = True
+    content = new_content
 
 # Patch cutlass_block_fp8_supported()
-content = re.sub(
+new_content = re.sub(
     r'(def cutlass_block_fp8_supported\(\)[^:]*:\n)',
     r'\1    return False  # Patched: sm_121 not in prebuilt CUTLASS\n',
     content
 )
+if new_content != content:
+    changed = True
+    content = new_content
 
 # Patch module-level constants
-content = re.sub(
-    r'CUTLASS_FP8_SUPPORTED\s*=\s*cutlass_fp8_supported\(\)',
-    'CUTLASS_FP8_SUPPORTED = False  # Patched: sm_121',
-    content
-)
-content = re.sub(
-    r'CUTLASS_BLOCK_FP8_SUPPORTED\s*=\s*cutlass_block_fp8_supported\(\)',
-    'CUTLASS_BLOCK_FP8_SUPPORTED = False  # Patched: sm_121',
-    content
-)
+for old, new in [
+    (r'CUTLASS_FP8_SUPPORTED\s*=\s*cutlass_fp8_supported\(\)',
+     'CUTLASS_FP8_SUPPORTED = False  # Patched: sm_121'),
+    (r'CUTLASS_BLOCK_FP8_SUPPORTED\s*=\s*cutlass_block_fp8_supported\(\)',
+     'CUTLASS_BLOCK_FP8_SUPPORTED = False  # Patched: sm_121'),
+]:
+    new_content = re.sub(old, new, content)
+    if new_content != content:
+        changed = True
+        content = new_content
 
-with open("$TARGET", 'w') as f:
-    f.write(content)
-
-print("  Patched w8a8_utils.py")
+if changed:
+    with open(target, 'w') as f:
+        f.write(content)
+    print("  Patched w8a8_utils.py")
+elif 'return False  # Patched: sm_121' in content:
+    print("  Already patched")
+else:
+    print("  ERROR: Could not find patch targets — vLLM version may have changed", file=sys.stderr)
+    sys.exit(1)
 PYEOF
 
 # Clear pyc caches

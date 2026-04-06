@@ -84,7 +84,7 @@ BENCHMARK_PROMPTS = {
             )},
         ],
         "max_tokens": 300,
-        "expect_contains": ["22"],
+        "expect_contains": ["x = 5", "22"],
     },
     "summarization": {
         "label": "Text Summarization",
@@ -193,7 +193,7 @@ def call_api(base_url: str, api_key: str, model: str, messages: list,
         start = time.perf_counter()
         first_token_time = None
         full_text = ""
-        token_count = 0
+        token_count = 0  # counts SSE chunks with content (approximates tokens)
 
         resp = requests.post(url, json=payload, headers=headers, stream=True, timeout=120)
         resp.raise_for_status()
@@ -386,7 +386,7 @@ def run_benchmark(base_url: str, api_key: str, model: str) -> dict:
 def save_report(results: dict, output_dir: str = ".") -> str:
     """Save benchmark results to JSON file."""
     model_safe = results["model_name"].replace("/", "_").replace(" ", "_")
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     filename = f"benchmark_{model_safe}_{ts}.json"
     path = Path(output_dir) / filename
     path.parent.mkdir(parents=True, exist_ok=True)

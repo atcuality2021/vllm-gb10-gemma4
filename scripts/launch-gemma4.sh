@@ -5,7 +5,7 @@
 # Usage: ./launch-gemma4.sh [/path/to/gemma-4-31B-it] [port]
 # =============================================================================
 
-set -e
+set -euo pipefail
 
 MODEL_PATH="${1:-$HOME/hf_models/gemma-4-31B-it}"
 PORT="${2:-8000}"

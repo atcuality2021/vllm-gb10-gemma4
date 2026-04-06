@@ -5,7 +5,7 @@
 # Usage: ./launch-qwen-omni.sh [/path/to/Qwen3-Omni-30B-A3B-Instruct] [port]
 # =============================================================================
 
-set -e
+set -euo pipefail
 
 MODEL_PATH="${1:-$HOME/hf_models/Qwen3-Omni-30B-A3B-Instruct}"
 PORT="${2:-8000}"

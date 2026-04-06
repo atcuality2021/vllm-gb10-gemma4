@@ -10,20 +10,10 @@
 # Default venv: ~/vllm-env
 # =============================================================================
 
-set -e
-
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
-
-log()  { echo -e "${GREEN}[OK]${NC} $1"; }
-warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
-err()  { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
-info() { echo -e "${BLUE}[INFO]${NC} $1"; }
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib/common.sh"
 VENV="${1:-$HOME/vllm-env}"
 
 echo ""
@@ -41,11 +31,9 @@ echo ""
   python3.12 -m venv $VENV
   $VENV/bin/pip install vllm"
 
-[ -d "$VENV/lib/python3.12/site-packages/vllm" ] || {
-    PYVER=$($VENV/bin/python --version 2>&1 | grep -oP '3\.\d+')
-    [ -d "$VENV/lib/python${PYVER}/site-packages/vllm" ] || \
-        err "vLLM not installed in $VENV. Install with: $VENV/bin/pip install vllm"
-}
+PYVER=$(detect_pyver "$VENV")
+[ -d "$VENV/lib/python${PYVER}/site-packages/vllm" ] || \
+    err "vLLM not installed in $VENV. Install with: $VENV/bin/pip install vllm"
 
 VLLM_VER=$($VENV/bin/pip show vllm 2>/dev/null | grep Version | awk '{print $2}')
 info "Detected vLLM version: $VLLM_VER"
