@@ -1,10 +1,18 @@
-# vLLM + Gemma 4 on NVIDIA DGX Spark GB10
+# vLLM + Gemma 4 + MTP + ManthanQuant on NVIDIA DGX Spark GB10
 
-**Complete vLLM + Gemma 4 setup for NVIDIA DGX Spark GB10 -- one command install.**
+**The complete GB10 inference stack in one repo: native Gemma 4, MTP speculative decoding, and ManthanQuant KV-cache compression.**
 
-Stock vLLM does not work on the DGX Spark GB10. The Blackwell sm_121 GPU is missing from prebuilt NCCL kernels, CUTLASS FP8 tables, and Ray's memory heuristics. On top of that, Google Gemma 4 model support only exists in vLLM main (PR #38826) and is not in any stable release. This repository bundles all 8 GB10 fixes together with the Gemma 4 backport patch, ready-to-run launch scripts, and a benchmark suite with real results.
+Stock vLLM does not work on the DGX Spark GB10. The Blackwell sm_121 GPU is missing from prebuilt NCCL kernels, CUTLASS FP8 tables, and Ray's memory heuristics. On top of that, Google Gemma 4 model support only exists in vLLM main (PR #38826) and is not in any stable release. This repository bundles everything needed to run Gemma 4 well on a GB10 — all 8 GB10 fixes, the Gemma 4 backport, a from-source fork build with MTP, the ManthanQuant KV-compression patch, ready-to-run launch scripts, and a benchmark suite with real results.
 
-> **New: from-source build with native Gemma 4 + MTP speculative decoding.**
+Three pieces, one repo — pick the layers you need:
+
+| Layer | What it adds | Where |
+|-------|--------------|-------|
+| **Gemma 4** | Model support on GB10 (sm_121 fixes + backport, or native in the fork build) | `patches/`, `scripts/build-from-source.sh` |
+| **MTP** | Speculative decoding for **gemma-4-26B-A4B-it** — ~1.6x single-stream decode, fork-only | `scripts/build-from-source.sh`, `scripts/launch-gemma4-mtp.sh` |
+| **ManthanQuant** | 3-bit Lloyd-Max KV-cache compression (~5.1x) for longer context on unified memory | `third_party/manthanquant/`, `patches/manthanquant-kv-compression.sh` |
+
+> **From-source build with native Gemma 4 + MTP speculative decoding.**
 > [`scripts/build-from-source.sh`](#from-source-build-vllm-0221--gemma-4-mtp) compiles the
 > [`atcuality2021/vllm`](https://github.com/atcuality2021/vllm) fork natively for
 > aarch64/GB10 (vLLM 0.22.1, torch 2.11.0+cu130). Gemma 4 is then **native** — no
@@ -14,6 +22,13 @@ Stock vLLM does not work on the DGX Spark GB10. The Blackwell sm_121 GPU is miss
 > **~1.6x single-stream decode speedup at ~80% draft acceptance**. The file-copy
 > backport below still works for existing 0.18.x installs.
 
+> **ManthanQuant KV-cache compression is vendored in** under
+> [`third_party/manthanquant/`](#kv-cache-compression-manthanquant) — no separate
+> clone. It compresses the KV cache to 3 bits per element with pure-numpy Lloyd-Max
+> on the Grace CPU cores (the GB10 sm_121 path deliberately avoids custom CUDA
+> kernels, which collide with Triton at load). Stack it on top of an MTP launch with
+> a single `MANTHANQUANT=1`.
+
 ---
 
 ## Table of Contents
@@ -21,6 +36,7 @@ Stock vLLM does not work on the DGX Spark GB10. The Blackwell sm_121 GPU is miss
 - [Hardware: NVIDIA DGX Spark GB10](#hardware-nvidia-dgx-spark-gb10)
 - [Quick Start](#quick-start)
 - [From-Source Build (vLLM 0.22.1 + Gemma 4 MTP)](#from-source-build-vllm-0221--gemma-4-mtp)
+- [KV Cache Compression (ManthanQuant)](#kv-cache-compression-manthanquant)
 - [Full Installation Walkthrough](#full-installation-walkthrough)
 - [All GB10 Fixes](#all-gb10-fixes)
 - [Gemma 4 Patch Details](#gemma-4-patch-details)
@@ -148,6 +164,88 @@ to serve without speculative decoding.
 MTP only helps single-stream latency; it does not raise aggregate throughput at
 high concurrency. The `--enforce-eager` flag (CUDA graphs off) is currently
 required on GB10, which caps the no-MTP baseline.
+
+---
+
+## KV Cache Compression (ManthanQuant)
+
+[`third_party/manthanquant/`](third_party/manthanquant) is the vendored
+**ManthanQuant** package — 3-bit Lloyd-Max KV-cache compression built for GB10
+unified memory. It is bundled directly in this repo so the whole stack (Gemma 4
++ MTP + KV compression) installs from one clone.
+
+### Why this design on GB10
+
+On the DGX Spark, the GPU and CPU share one 128 GB pool, and loading custom CUDA
+extensions at import time conflicts with Triton on sm_121. ManthanQuant therefore
+runs its quantizer in **pure numpy on the Grace CPU cores** — `.cpu().numpy()` is
+near-free on unified memory because nothing physically moves. There is a faster
+CUDA path (QJL + fused decode in `csrc/`), but it is **off by default and not used
+on GB10**; it is meant for x86/datacenter GPUs.
+
+### How it compresses
+
+Per attention vector of dimension `D` (head_dim), bf16 is replaced by an L2 radius
+plus a bit-packed 3-bit Lloyd-Max index per element:
+
+| | bytes for D=256 |
+|---|---|
+| Original bf16 | `256 × 2 = 512` |
+| Radius + 3-bit packed | `4 + ⌈256×3/8⌉ = 4 + 96 = 100` |
+| **Ratio** | **5.12x** at **~0.978 cosine similarity** |
+
+The 8 Lloyd-Max centroids are MSE-optimal for a unit Gaussian, which is what each
+vector looks like after L2-normalization and `√D` scaling. The repo's proof suite
+(`third_party/manthanquant/tests/test_compression_proof.py`) validates the ratio,
+the quality bound, bit-packing round-trips, and edge cases — all 10 tests pass.
+
+### Install
+
+The from-source MTP build must already exist (it provides the venv to patch):
+
+```bash
+# one-time: install the package + patch the vLLM attention backends in the venv
+./patches/manthanquant-kv-compression.sh ~/vllm-mtp-env
+```
+
+This editable-installs the **CPU-only** package (no nvcc) and patches the
+`flash_attn` + `triton_attn` backends so KV is compressed after each layer.
+Gemma 4 uses `triton_attn` on GB10 (vLLM hard-forces it for Gemma 4's
+heterogeneous head dims). Revert any time:
+
+```bash
+./patches/manthanquant-kv-compression.sh ~/vllm-mtp-env --revert
+```
+
+### Activate at serve time
+
+Compression is gated by an env flag so you can A/B it without re-patching. The
+MTP launcher exposes it as `MANTHANQUANT=1`:
+
+```bash
+MANTHANQUANT=1 VLLM_VENV=~/vllm-mtp-env ./scripts/launch-gemma4-mtp.sh \
+  ~/hf_models/gemma-4-26B-A4B-it \
+  ~/hf_models/gemma-4-26B-A4B-it-assistant
+```
+
+### Verify it is actually running
+
+ManthanQuant writes an **honest activation marker** only when the KV hook truly
+fires (not merely when the patched file is imported):
+
+```bash
+cat ~/logs/manthanquant_active.flag   # one "kv_hook_first ..." line per worker pid
+```
+
+An empty/absent file means compression is **not** running — by design, the loaded
+flag and the active flag are kept separate so "the module imported" is never
+mistaken for "compression happened".
+
+> **Scope note.** On GB10 the compressed cache is currently built and measured
+> CPU-side; the fused compressed-decode path that reads it back is CUDA-only and
+> disabled on sm_121, so attention still runs against the bf16 paged cache. The
+> 5.12x is a faithful measurement of the compressed copy. Wiring the compressed
+> decode into the GB10 path (for end-to-end VRAM savings) is the open follow-up.
 
 ---
 
@@ -353,7 +451,7 @@ Both models benchmarked on a single DGX Spark GB10 node (128 GB unified memory) 
 
 | Model | Type | Active Params | Speed | Quality | Context | Recommendation |
 |-------|------|---------------|-------|---------|---------|----------------|
-| **Gemma-4-26B-A4B-it** | MoE | 4B | ~19.5 tok/s (MTP) | Excellent | 32K | Best Gemma 4 on GB10. MoE + MTP + native tool calling. Needs the [from-source build](#from-source-build-vllm-0221--gemma-4-mtp). |
+| **Gemma-4-26B-A4B-it** | MoE | 4B | ~19.5 tok/s (MTP) | Excellent | 32K | Best Gemma 4 on GB10. MoE + MTP + native tool calling. Needs the [from-source build](#from-source-build-vllm-0221--gemma-4-mtp); add [ManthanQuant](#kv-cache-compression-manthanquant) (`MANTHANQUANT=1`) to shrink the KV cache ~5x. |
 | **Qwen3-Omni-30B-A3B** | MoE | 3B | 28 tok/s | 10/10 | 16K | Best overall for GB10. Fast, accurate, long context. |
 | **Gemma-4-31B-it** | Dense | 31B | 3.8 tok/s | 9/10 | 8K | High quality but too slow for interactive use. Batch/offline only. |
 | **Qwen3.5-122B-A10B-FP8** | MoE | 10B | ~15 tok/s* | Excellent | 16K | Best quality. Requires 2x GB10 nodes (tensor parallel). |
@@ -444,6 +542,7 @@ vllm-gb10-gemma4/
 |   |-- cutlass-fp8-sm121.sh      # Fix 2: Disable CUTLASS FP8
 |   |-- ray-unified-memory.sh     # Fix 3: Ray OOM threshold
 |   |-- gemma4-backport.sh        # Gemma 4 model support (0.18.x only)
+|   |-- manthanquant-kv-compression.sh  # Install + patch ManthanQuant KV compression
 |
 |-- configs/
 |   |-- gemma4-31b-single.env     # Single-node Gemma 4
@@ -453,9 +552,16 @@ vllm-gb10-gemma4/
 |-- scripts/
 |   |-- build-from-source.sh      # Build the fork (native Gemma 4 + MTP)
 |   |-- launch-gemma4.sh          # Launch Gemma 4 31B (dense)
-|   |-- launch-gemma4-mtp.sh      # Launch Gemma 4 26B-A4B MoE + MTP
+|   |-- launch-gemma4-mtp.sh      # Launch Gemma 4 26B-A4B MoE + MTP (+ MANTHANQUANT=1)
 |   |-- launch-qwen-omni.sh       # Launch Qwen3-Omni-30B
 |   |-- run-benchmark.sh          # Run benchmark suite
+|
+|-- third_party/
+|   |-- manthanquant/             # Vendored 3-bit KV-cache compression
+|       |-- manthanquant/         #   cpu_quantize.py (numpy path), vllm_patch.py, ops.py
+|       |-- csrc/                 #   CUDA QJL + fused-decode kernels (x86 only, off by default)
+|       |-- install_vllm_patch.py #   Patches vLLM attention backends (honors VLLM_ENV)
+|       |-- tests/                #   test_compression_proof.py (10 tests) + others
 |
 |-- benchmarks/
 |   |-- model_benchmark.py        # Benchmark suite (10 tests)
@@ -532,6 +638,23 @@ are **fork-only**. A stock or backported vLLM cannot load them. Use the
 The wrong tool parser is active (e.g. the `hermes` fallback). Launch with
 `--enable-auto-tool-choice --tool-call-parser gemma4`. `launch-gemma4-mtp.sh`
 sets this automatically.
+
+### ManthanQuant: `~/logs/manthanquant_active.flag` is empty / missing
+
+The patched backend imported but the KV hook never fired. Common causes:
+(1) you forgot `MANTHANQUANT=1` at launch (the launcher only sets
+`MANTHANQUANT_ENABLED=1` when you pass it); (2) the backend the model actually
+uses wasn't patched — Gemma 4 uses `triton_attn`, so re-run
+`./patches/manthanquant-kv-compression.sh $VENV` and confirm it reports
+`[triton_attn] OK`; (3) the patch went into a different venv — set
+`VLLM_ENV=$VENV` (the patch script does this for you). The `loaded.flag`
+accumulating is *not* proof — only `active.flag` is.
+
+### ManthanQuant: `pip install` tries to compile `.cu` files and fails
+
+The CUDA `_C` extension is opt-in. The default install is CPU-only and needs no
+nvcc. If you hit nvcc errors you likely set `MANTHANQUANT_BUILD_CUDA=1` — unset
+it on GB10. The active GB10 path is pure numpy and never loads `_C`.
 
 ### Gemma 4: `AttributeError: 'NoneType' object has no attribute 'dtype'`
 

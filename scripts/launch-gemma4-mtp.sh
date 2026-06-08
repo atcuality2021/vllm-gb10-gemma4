@@ -13,8 +13,10 @@
 # launch the target model without speculative decoding.
 #
 # Env:
-#   VLLM_VENV   venv with the from-source build   (default ~/vllm-mtp-env)
-#   API_KEY     bearer key for the OpenAI server  (optional)
+#   VLLM_VENV     venv with the from-source build   (default ~/vllm-mtp-env)
+#   API_KEY       bearer key for the OpenAI server  (optional)
+#   MANTHANQUANT  set to 1 to activate ManthanQuant 3-bit KV compression
+#                 (install it first: ./patches/manthanquant-kv-compression.sh)
 # =============================================================================
 
 set -euo pipefail
@@ -39,6 +41,17 @@ export HF_HUB_OFFLINE=1
 export NCCL_P2P_DISABLE=1
 export NCCL_IB_DISABLE=1
 
+# ManthanQuant 3-bit KV cache compression (opt-in). The vLLM backends must be
+# patched first via patches/manthanquant-kv-compression.sh; this just flips the
+# runtime activation flag and resets the honest activation marker.
+MQ_NOTE="disabled"
+if [ "${MANTHANQUANT:-0}" = "1" ]; then
+    export MANTHANQUANT_ENABLED=1
+    mkdir -p "$HOME/logs"
+    rm -f "$HOME/logs/manthanquant_active.flag"
+    MQ_NOTE="enabled (3-bit Lloyd-Max, CPU path)"
+fi
+
 source "$VENV/bin/activate"
 
 # Speculative decoding config (omit if draft is "none" or missing)
@@ -62,6 +75,7 @@ echo "============================================="
 echo "  Model:    $MODEL_PATH"
 echo "  Port:     $PORT"
 echo "  Spec:     $SPEC_NOTE"
+echo "  KV comp:  $MQ_NOTE"
 echo "  GPU Mem:  0.55"
 echo "  Context:  32768"
 echo "  Seqs:     6"
