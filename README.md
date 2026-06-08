@@ -4,12 +4,23 @@
 
 Stock vLLM does not work on the DGX Spark GB10. The Blackwell sm_121 GPU is missing from prebuilt NCCL kernels, CUTLASS FP8 tables, and Ray's memory heuristics. On top of that, Google Gemma 4 model support only exists in vLLM main (PR #38826) and is not in any stable release. This repository bundles all 8 GB10 fixes together with the Gemma 4 backport patch, ready-to-run launch scripts, and a benchmark suite with real results.
 
+> **New: from-source build with native Gemma 4 + MTP speculative decoding.**
+> [`scripts/build-from-source.sh`](#from-source-build-vllm-0221--gemma-4-mtp) compiles the
+> [`atcuality2021/vllm`](https://github.com/atcuality2021/vllm) fork natively for
+> aarch64/GB10 (vLLM 0.22.1, torch 2.11.0+cu130). Gemma 4 is then **native** — no
+> file-copy backport — and you also get `gemma4_mtp` (MTP speculative decoding) and
+> `gemma4_unified` (audio/video), which are **fork-only** and exist in no stock or
+> upstream-main vLLM. On the MoE **gemma-4-26B-A4B-it**, MTP delivers a verified
+> **~1.6x single-stream decode speedup at ~80% draft acceptance**. The file-copy
+> backport below still works for existing 0.18.x installs.
+
 ---
 
 ## Table of Contents
 
 - [Hardware: NVIDIA DGX Spark GB10](#hardware-nvidia-dgx-spark-gb10)
 - [Quick Start](#quick-start)
+- [From-Source Build (vLLM 0.22.1 + Gemma 4 MTP)](#from-source-build-vllm-0221--gemma-4-mtp)
 - [Full Installation Walkthrough](#full-installation-walkthrough)
 - [All GB10 Fixes](#all-gb10-fixes)
 - [Gemma 4 Patch Details](#gemma-4-patch-details)
@@ -64,6 +75,79 @@ Or launch Qwen3-Omni (recommended for speed):
 ```bash
 ./scripts/launch-qwen-omni.sh /path/to/Qwen3-Omni-30B-A3B-Instruct
 ```
+
+---
+
+## From-Source Build (vLLM 0.22.1 + Gemma 4 MTP)
+
+The [Quick Start](#quick-start) installer grafts Gemma 4 onto an existing vLLM
+0.18.x via file copy. That works, but it cannot give you **MTP speculative
+decoding** or the **`gemma4_unified`** (audio/video) architecture — those live
+only in the [`atcuality2021/vllm`](https://github.com/atcuality2021/vllm) fork,
+not in any stock release and not in upstream `main`.
+
+To get them, build the fork from source. The build targets vLLM **0.22.1**,
+where the Blackwell/unified-memory assert that tripped the older line is already
+fixed upstream:
+
+```bash
+./scripts/build-from-source.sh ~/vllm-mtp-env 2
+#                              ^venv          ^MAX_JOBS (keep low — see below)
+```
+
+What the build does:
+
+1. Clones the fork at a pinned commit (`2a983c79a`, the same revision used in
+   production) and verifies `gemma4_mtp.py` is present.
+2. Creates an isolated venv and installs **torch 2.11.0+cu130** (the aarch64
+   SBSA wheel the fork pins — build and runtime ABIs match).
+3. Compiles the CUDA extensions with `TORCH_CUDA_ARCH_LIST="12.0+PTX"`. torch's
+   bundled arch list stops at sm_120; the embedded PTX lets the driver
+   JIT-compile to GB10's sm_121 at load time.
+4. Builds + installs the wheel and asserts `Gemma4MTPModel` and
+   `Gemma4ForCausalLM` are registered.
+
+> **RAM safety.** A full-parallel CUDA compile can use several GiB per
+> translation unit and will OOM a box that is also serving a model. Keep
+> `MAX_JOBS` at 2–3 and watch `free -g`. The build is fully isolated in its own
+> venv and produces a wheel — it never touches a running runtime env. Expect
+> roughly 2 hours at `MAX_JOBS=2` on a GB10.
+
+After the build, Gemma 4 is **native** (skip `patches/gemma4-backport.sh`). For
+single-node serving you still want the CUTLASS FP8 + Ray OOM fixes; multi-node
+also needs the NCCL sm_121 build:
+
+```bash
+./patches/cutlass-fp8-sm121.sh ~/vllm-mtp-env
+./patches/ray-unified-memory.sh ~/vllm-mtp-env
+```
+
+### Launch with MTP
+
+```bash
+VLLM_VENV=~/vllm-mtp-env ./scripts/launch-gemma4-mtp.sh \
+  ~/hf_models/gemma-4-26B-A4B-it \
+  ~/hf_models/gemma-4-26B-A4B-it-assistant      # the MTP draft
+```
+
+The draft is the matching `*-assistant` checkpoint (`model_type:
+gemma4_assistant`). The launcher also enables the **`gemma4` tool-call parser**
+so tool calling and guided JSON work out of the box. Pass `none` as the draft
+to serve without speculative decoding.
+
+### Measured MTP result (gemma-4-26B-A4B-it, single-node GB10)
+
+| Metric | Value |
+|--------|------:|
+| Draft acceptance rate | **79.5%** |
+| Mean acceptance length | 1.79 (of max 2.0 at `num_speculative_tokens=1`) |
+| Decode, MTP off (`--enforce-eager`) | ~12 tok/s |
+| Decode, MTP on | **~19.5 tok/s (≈1.6x)** |
+| Context / KV | 32K, 395K-token cache (12x concurrency) |
+
+MTP only helps single-stream latency; it does not raise aggregate throughput at
+high concurrency. The `--enforce-eager` flag (CUDA graphs off) is currently
+required on GB10, which caps the no-MTP baseline.
 
 ---
 
@@ -269,6 +353,7 @@ Both models benchmarked on a single DGX Spark GB10 node (128 GB unified memory) 
 
 | Model | Type | Active Params | Speed | Quality | Context | Recommendation |
 |-------|------|---------------|-------|---------|---------|----------------|
+| **Gemma-4-26B-A4B-it** | MoE | 4B | ~19.5 tok/s (MTP) | Excellent | 32K | Best Gemma 4 on GB10. MoE + MTP + native tool calling. Needs the [from-source build](#from-source-build-vllm-0221--gemma-4-mtp). |
 | **Qwen3-Omni-30B-A3B** | MoE | 3B | 28 tok/s | 10/10 | 16K | Best overall for GB10. Fast, accurate, long context. |
 | **Gemma-4-31B-it** | Dense | 31B | 3.8 tok/s | 9/10 | 8K | High quality but too slow for interactive use. Batch/offline only. |
 | **Qwen3.5-122B-A10B-FP8** | MoE | 10B | ~15 tok/s* | Excellent | 16K | Best quality. Requires 2x GB10 nodes (tensor parallel). |
@@ -352,13 +437,13 @@ See `configs/qwen-122b-multi-node.env` for a complete environment file.
 ```
 vllm-gb10-gemma4/
 |
-|-- install.sh                    # One-command installer
+|-- install.sh                    # One-command installer (file-copy backport)
 |
 |-- patches/
 |   |-- nccl-sm121-build.sh       # Fix 1: Build NCCL for sm_121
 |   |-- cutlass-fp8-sm121.sh      # Fix 2: Disable CUTLASS FP8
 |   |-- ray-unified-memory.sh     # Fix 3: Ray OOM threshold
-|   |-- gemma4-backport.sh        # Gemma 4 model support
+|   |-- gemma4-backport.sh        # Gemma 4 model support (0.18.x only)
 |
 |-- configs/
 |   |-- gemma4-31b-single.env     # Single-node Gemma 4
@@ -366,7 +451,9 @@ vllm-gb10-gemma4/
 |   |-- qwen-122b-multi-node.env  # Multi-node Qwen 122B
 |
 |-- scripts/
-|   |-- launch-gemma4.sh          # Launch Gemma 4 31B
+|   |-- build-from-source.sh      # Build the fork (native Gemma 4 + MTP)
+|   |-- launch-gemma4.sh          # Launch Gemma 4 31B (dense)
+|   |-- launch-gemma4-mtp.sh      # Launch Gemma 4 26B-A4B MoE + MTP
 |   |-- launch-qwen-omni.sh       # Launch Qwen3-Omni-30B
 |   |-- run-benchmark.sh          # Run benchmark suite
 |
@@ -432,6 +519,19 @@ Install dev headers: `sudo apt install -y python3.12-dev`
 ### Gemma 4: `KeyError: 'gemma4'` or model not recognized
 
 The Gemma 4 patch was not applied. Run `patches/gemma4-backport.sh $VENV`.
+
+### Gemma 4 MTP: `Transformers does not recognize this architecture` (gemma4_assistant)
+
+The MTP draft (`*-assistant`, `model_type: gemma4_assistant`) and `gemma4_mtp`
+are **fork-only**. A stock or backported vLLM cannot load them. Use the
+[from-source build](#from-source-build-vllm-0221--gemma-4-mtp)
+(`scripts/build-from-source.sh`), which bakes in `Gemma4MTPModel`.
+
+### Tool calls leak into message content as `<|tool_call>...`
+
+The wrong tool parser is active (e.g. the `hermes` fallback). Launch with
+`--enable-auto-tool-choice --tool-call-parser gemma4`. `launch-gemma4-mtp.sh`
+sets this automatically.
 
 ### Gemma 4: `AttributeError: 'NoneType' object has no attribute 'dtype'`
 
